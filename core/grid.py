@@ -74,9 +74,16 @@ class Grid:
             raise RuntimeError("No empty cells available")
 
         return random.choice(empty_cells)
+    
+    def update(self):
+
+        return
 
     # Render Tick
-    def update(self):
+    def render(self):
+        
+        self.update()
+
         cls(True)  # clear terminal
 
         # print top border
