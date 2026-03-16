@@ -2,17 +2,40 @@ from .objects import AIAgent, SpatialObject
 from typing import List, Tuple, Dict, Union, Optional
 from .screen import cls, cprint
 import random
+from pathlib import Path
+import os
+import json
+import threading
+
+maps_root = Path(os.path.join(Path(__file__).parent.resolve(), 'maps'))
+maps = {
+    int(m.strip('map').strip('.json')) :
+    os.path.join(str(maps_root), m)
+    for m in maps_root.iterdir()
+}
 
 class Grid:
+
+    map_lock = threading.RLock()
 
     def __init__(
         self,
         agents: Optional[List[AIAgent | SpatialObject]],
-        grid_size: Tuple[int, int] = (9, 9),
+        map_number = 0,
+        # grid_size: Tuple[int, int] = (9, 9),
         max_objects_in_space: int = 3
     ):
 
-        self.width, self.height = grid_size
+        # Load the map and sprite data
+        with self.map_lock:
+            with open(maps[map_number], 'r', encoding='utf-8') as m:
+                self.map_data = json.load(m)
+                
+                points = [tuple(cell["point"]) for cell in self.map_data["map"]]
+                xs, ys = zip(*points)
+                # Infer width and height
+                self.width = max(xs) + 1
+                self.height = max(ys) + 1
 
         # Maximum allotment of items per space
         self.mois = max_objects_in_space
@@ -36,12 +59,18 @@ class Grid:
                 point = self.random_point(empty=True)
                 self.G[point].append(agent)
 
-        # Bounding Box
-        self.bb = {
-            'top': '┌' + ('─' * self.width) + '┐',
-            'mid': '│',
-            'btm': '└' + ('─' * self.width) + '┘'
-        }
+    # def load_map(
+    #         map_number: int, 
+    #         agents: Optional[List[AIAgent | SpatialObject]] = None
+    #     ) -> Grid:
+    #     with map_lock:
+    #         map_file = maps.get(map_number)
+    #         if not map_file:
+    #             raise FileNotFoundError(f"Map {map_number} not found")
+    #         with open(map_file, "r", encoding="utf-8") as f:
+    #             map_data = json.load(f)
+    #     # Initialize Grid with map_data
+    #     return Grid(agents=agents, map_data=map_data)
 
     # Check if there is available space by spatial weight
     def available_space(self, coords:Tuple[int, int]):
@@ -80,41 +109,40 @@ class Grid:
         return
 
     # Render Tick
-    def render(self):
+    # def render(self):
         
-        self.update()
+        # cls(True)  # clear terminal
 
-        cls(True)  # clear terminal
+        # # print top border
+        # print(self.bb['top'])
 
-        # print top border
-        print(self.bb['top'])
+        # for y in range(self.height):
 
-        for y in range(self.height):
+        #     print(self.bb['mid'], end='')
 
-            print(self.bb['mid'], end='')
+        #     for x in range(self.width):
 
-            for x in range(self.width):
+        #         cell = self.G[(x, y)]
 
-                cell = self.G[(x, y)]
+        #         if not cell:
+        #             # empty space
+        #             print(' ', end='')
+        #             continue
 
-                if not cell:
-                    # empty space
-                    print(' ', end='')
-                    continue
+        #         # number of objects in this cell
+        #         count = len(cell)
 
-                # number of objects in this cell
-                count = len(cell)
+        #         # find the heaviest object (highest spatial_weight)
+        #         heaviest = max(cell, key=lambda o: o.spatial_weight)
 
-                # find the heaviest object (highest spatial_weight)
-                heaviest = max(cell, key=lambda o: o.spatial_weight)
+        #         # get the foreground color from display
+        #         fg = getattr(heaviest.display, 'fg', '#000000')
 
-                # get the foreground color from display
-                fg = getattr(heaviest.display, 'fg', '#000000')
+        #         # print count in color
+        #         cprint(str(count), color=fg, end='')
 
-                # print count in color
-                cprint(str(count), color=fg, end='')
+        #     print(self.bb['mid'])
 
-            print(self.bb['mid'])
+        # # print bottom border
+        # print(self.bb['btm'])
 
-        # print bottom border
-        print(self.bb['btm'])
