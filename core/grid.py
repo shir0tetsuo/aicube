@@ -298,7 +298,7 @@ class Grid:
                 'UP':    self.has_space((x, y-1), w), # up
                 'DOWN':  self.has_space((x, y+1), w)  # down
             }
-            player.move(keys, passable)
+            player.move(dt, keys, passable)
 
             # NOTE : This data can be used to render the sprite.,
             #        and the "camera".

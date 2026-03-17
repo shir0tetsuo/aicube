@@ -78,6 +78,9 @@ class PlayerAgent(SpatialObject):
         self.transition_time = 300  # How many ms should go by going position to position
         self.phase_time = 0         # unix timer for ms passed when going tile to tile for smooth animation
         self.phase_elapsed = 0.0    # unix timer +=dt float
+        self.input_threshold = 50
+        # self.next_direction = None
+        # self.passables = { d: False for d in ['UP','DOWN','LEFT','RIGHT'] }
         
         # Rendering
         self.render_position = (0, 0)
@@ -95,7 +98,10 @@ class PlayerAgent(SpatialObject):
             ('WALK', 'RIGHT'): self.sprite.right_anim,
         }
 
-    def _player_movement(self):
+    def _player_movement(
+            self, 
+            # direction:str = None
+        ):
         '''
         Set player movement to `'WALK'` and proceed
         based on relative position.
@@ -105,6 +111,9 @@ class PlayerAgent(SpatialObject):
         self.state = 'WALK'
         self.position_start = self.position
         
+        # if direction:
+        #     self.facing = direction
+
         facing = self.facing
         x,y = self.position
 
@@ -118,7 +127,11 @@ class PlayerAgent(SpatialObject):
         return
     
     # The position is passed for rendering
-    def update(self, dt:float):
+    def update(
+            self, 
+            dt:float, 
+            # keys:pg.key.ScancodeWrapper
+        ):
         # TODO : Ledge Detection
 
 
@@ -160,33 +173,53 @@ class PlayerAgent(SpatialObject):
 
     def move(
             self, 
-            keys:pg.key.ScancodeWrapper, 
-            passables:Dict[str, bool] = { d: False for d in ['UP','DOWN','LEFT','RIGHT'] }
+            dt: float,
+            keys: pg.key.ScancodeWrapper, 
+            passables: Dict[str, bool] = { d: False for d in ['UP','DOWN','LEFT','RIGHT'] }
         ):
 
-        # Set facing and if passable, 
-        # set move player state
-        def do_movement(facing):
-            self.facing = facing
-            if passables.get(facing, False):
-                self._player_movement()
+        # self.passables = passables
+
+        direction = None
+
+        if keys[pg.K_w]:
+            direction = 'UP'
+        elif keys[pg.K_s]:
+            direction = 'DOWN'
+        elif keys[pg.K_a]:
+            direction = 'LEFT'
+        elif keys[pg.K_d]:
+            direction = 'RIGHT'
+
+        # No key pressed → reset buffer
+        if direction is None:
+            self.input_hold_time = 0.0
+            self.input_direction = None
             return
 
+        # New key press → reset timer
+        if self.input_direction != direction:
+            self.input_direction = direction
+            self.input_hold_time = 0.0
+
+            # Always update facing immediately
+            self.facing = direction
+            return
+
+        # Accumulate hold time
+        self.input_hold_time += dt
+
+        # If still idle, decide what to do
         if self.state == 'IDLE':
-            if keys[pg.K_w]:
-                do_movement('UP')
+            # Face instantly (already done above, but safe)
+            self.facing = direction
 
-            elif keys[pg.K_s]:
-                do_movement('DOWN')
-
-            elif keys[pg.K_a]:
-                do_movement('LEFT')
-
-            elif keys[pg.K_d]:
-                do_movement('RIGHT')
+            # Only move after threshold
+            if self.input_hold_time >= self.input_threshold:
+                if passables.get(direction, False):
+                    self._player_movement()
 
         if keys[pg.K_SPACE]:
             cprint(f'{repr(self)}: {self.position}', fg="#0DE4D9", bg="#202020")
 
-        return
-    
+        self.next_direction = direction
