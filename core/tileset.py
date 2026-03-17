@@ -62,6 +62,8 @@ class Tile:
             self.frames.append(tile)
             self.durations.append(duration)
 
+        self.total_durations = sum(self.durations)
+
         self.frame_count = len(self.frames)
         self.start_time = time.time()
 
@@ -74,6 +76,8 @@ class Tile:
                 tile = self._get_tile_by_hex(hex_id)
                 self.water_frames.append(tile)
                 self.water_durations.append(duration)
+        
+        self.water_total_durations = sum(self.water_durations) if self.water_durations else 0
 
     def _get_cached_base_tile(self, hex_id: str) -> Image.Image:
         """
@@ -128,31 +132,45 @@ class Tile:
 
         return tile
 
-    def _get_animated_frame(self, frames, durations):
+    def _get_animated_frame(self, frames, durations, elapsed_override=None):
         if len(frames) == 1:
             return frames[0]
 
-        elapsed_ms = (time.time() - self.start_time) * 1000
-        total_duration = sum(durations)
-        elapsed_ms %= total_duration
+        # Determine total duration
+        if durations is self.durations:
+            total_duration = self.total_durations
+        elif durations is self.water_durations:
+            total_duration = self.water_total_durations
+        else:
+            total_duration = sum(durations)
+
+        if total_duration <= 0:
+            return frames[0]
+
+        # Determine elapsed time
+        if elapsed_override is not None:
+            elapsed_ms = elapsed_override % total_duration
+        else:
+            elapsed_ms = ((time.time() - self.start_time) * 1000) % total_duration
 
         total = 0
         for frame, duration in zip(frames, durations):
             total += duration
-            if elapsed_ms <= total:
+            if elapsed_ms < total:
                 return frame
+
         return frames[-1]
 
-    def get_frame(self) -> Image.Image:
+    def get_frame(self, elapsed_override=None) -> Image.Image:
         """
         Return the current frame of the tile, optionally flipped and scaled.
         """
-        base = self._get_animated_frame(self.frames, self.durations)
+        base = self._get_animated_frame(self.frames, self.durations, elapsed_override)
 
         if not self.render_water or not any(self.blank_quads):
             result = base
         else:
-            water = self._get_animated_frame(self.water_frames, self.water_durations)
+            water = self._get_animated_frame(self.water_frames, self.water_durations, elapsed_override)
             result = water.copy()
             quad_w = self.tile_size // 2
             quad_h = self.tile_size // 2

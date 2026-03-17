@@ -1,6 +1,6 @@
 import time
 from datetime import datetime
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 import httpx
 import pygame as pg
 from .tileset import Tile
@@ -53,54 +53,133 @@ class PlayerAgent(SpatialObject):
 
     def __init__(
             self,
-            tileset: Sprite,
+            sprite: Sprite,
             spatial_weight = 2.0,
         ):
         super().__init__(spatial_weight)
 
-        self.tiles = tileset
+        self.sprite = sprite
         self.state = 'IDLE'
         self.facing = 'DOWN'
         self.position = (0, 0)
+        self.position_start = (0, 0)
         self.position_future = (0, 0)
         self.transition_time = 300  # How many ms should go by going position to position
-        self.phase_time = 0  # unix timer for ms passed when going tile to tile for smooth animation
+        self.phase_time = 0         # unix timer for ms passed when going tile to tile for smooth animation
+        self.phase_elapsed = 0.0    # unix timer +=dt float
 
-    def _player_movement(self, direction):
-        self.phase_time = time.time()
+        # The graphic is passed for rendering
+        self.render_state = {
+            ('IDLE', 'UP'): self.sprite.up,
+            ('IDLE', 'DOWN'): self.sprite.down,
+            ('IDLE', 'LEFT'): self.sprite.left,
+            ('IDLE', 'RIGHT'): self.sprite.right,
+            ('WALK', 'UP'): self.sprite.up_anim,
+            ('WALK', 'DOWN'): self.sprite.down_anim,
+            ('WALK', 'LEFT'): self.sprite.left_anim,
+            ('WALK', 'RIGHT'): self.sprite.right_anim,
+        }
+
+    def _player_movement(self):
+        '''
+        Set player movement to `'WALK'` and proceed
+        based on relative position.
+        '''
+        
+        self.phase_elapsed = 0.0
         self.state = 'WALK'
+        self.position_start = self.position
+        
+        facing = self.facing
+        x,y = self.position
+
+        self.position_future = {
+            'LEFT': (x-1, y),
+            'RIGHT': (x+1, y),
+            'UP': (x, y+1),
+            'DOWN': (x, y-1)
+        }.get(facing, (x, y))
+
         return
     
-    def update(self):
-        # TODO : Transition from position to position, 
-        #        animated; if now - phase_time >= self.transition_time
-        return
+    # # NOTE : Something doesn't seem right.
+    # def get_animation_frame(self):
+    #     if self.state != 'WALK':
+    #         return 0
 
-    def move(self, keys:pg.key.ScancodeWrapper):
+    #     # 2-frame walk cycle
+    #     cycle_speed = 100  # ms per frame
+
+    #     frame = int(self.phase_elapsed / cycle_speed) % 2
+    #     return frame
+    
+    # The position is passed for rendering
+    def update(self, dt:float):
+        # TODO : Ledge Detection
+
+
+        # LERP Position Calculation
+
+        if self.state != 'WALK':
+            return self.position
+
+        # accumulate ms
+        self.phase_elapsed += dt
+
+        # progress 0 → 1
+        t = min(self.phase_elapsed / self.transition_time, 1.0)
+
+        # Smoothstep easing
+        t = t * t * (3 - 2 * t)
+
+        x0, y0 = self.position_start
+        x1, y1 = self.position_future
+
+        # Linear interpolation
+        xf = x0 + (x1 - x0) * t
+        yf = y0 + (y1 - y0) * t
+
+        # Quantize to nearest 1/8
+        def quantize(v):
+            return round(v * 8) / 8
+
+        xf = quantize(xf)
+        yf = quantize(yf)
+
+        # If movement finished
+        if t >= 1.0:
+            self.position = self.position_future
+            self.state = 'IDLE'
+            return self.position
+
+        return (xf, yf)
+
+    def move(
+            self, 
+            keys:pg.key.ScancodeWrapper, 
+            passables:Dict[str, bool] = { d: False for d in ['UP','DOWN','LEFT','RIGHT'] }
+        ):
+
+        # Set facing and if passable, 
+        # set move player state
+        def do_movement(facing):
+            self.facing = facing
+            if not passables.get(facing, False):
+                self._player_movement()
+            return
 
         if self.state == 'IDLE':
             if keys[pg.K_w]:
-                self.facing = 'UP'
-                self._player_movement()
-            if keys[pg.K_s]:
-                self.facing = 'DOWN'
-                self._player_movement()
-            if keys[pg.K_a]:
-                self.facing = 'LEFT'
-                self._player_movement()
-            if keys[pg.K_d]:
-                self.facing = 'RIGHT'
-                self._player_movement()
+                do_movement('UP')
+
+            elif keys[pg.K_s]:
+                do_movement('DOWN')
+
+            elif keys[pg.K_a]:
+                do_movement('LEFT')
+
+            elif keys[pg.K_d]:
+                do_movement('RIGHT')
 
         return
     
-    def render(self):
-        state = self.state
-        facing = self.facing
-
-
-
-        # TODO : Calculate the diff between the delta t and the phase t
-        #        to project the sprite at the correct location on the
-        #        screen while it's in 'WALK' state
-        return

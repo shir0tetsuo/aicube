@@ -7,6 +7,7 @@ from pathlib import Path
 import os
 import json
 from PIL import Image
+import pygame as pg
 import threading
 
 images_root = Path(os.path.join(Path(__file__).parent.parent.resolve(), 'images'))
@@ -71,7 +72,8 @@ class Grid:
             Tuple[int, int], 
                 List[
                     AIAgent |
-                    SpatialObject
+                    SpatialObject |
+                    PlayerAgent
                 ]
             ] = {
             (x, y): []
@@ -182,8 +184,50 @@ class Grid:
                 players.append(coords)
         return players
     
-    def update(self):
+    def update(self, keys:pg.key.ScancodeWrapper, dt:float):
+        # Obtain the player from the grid.
+        player_coords = self.find_player()
 
+        if player_coords:
+            player:PlayerAgent = next([i for i in self.G[player_coords] if isinstance(i, PlayerAgent)])
+            x,y=player_coords
+            w = player.spatial_weight
+        
+            # Perform player movement based on spatial weights
+            passable = {
+                'LEFT':  self.has_space((x-1, y), w), # left
+                'RIGHT': self.has_space((x+1, y), w), # right
+                'UP':    self.has_space((x, y+1), w), # up
+                'DOWN':  self.has_space((x, y-1), w)  # down
+            }
+            player.move(keys, passable)
+
+            # NOTE : This data can be used to render the sprite.,
+            #        and the "camera".
+            render_x, render_y = player.update(dt)
+
+            sprite = player.render_state.get((player.state, player.facing))
+            # If animated tile supports frames:
+            if player.state == 'WALK':
+                sprite_frame = sprite.get_frame(player.phase_elapsed)
+            else:
+                sprite_frame = sprite.get_frame()
+
+            # self.camera_projections(screen) ...
+
+            # Move the player on the grid if position is
+            # not equal to the player's position
+            if isinstance(render_x, int) and isinstance(render_y, int):
+                if (render_x != x) or (render_y != y):
+                    if self.G.get((render_x, render_y)):
+                        self.G[player_coords].remove(player)
+                        self.G[(render_x, render_y)].append(player)
+                    else:
+                        # Safety
+                        player.position = player_coords
+                        player.position_start = player_coords
+                        player.position_future = player_coords
+                        cprint(f'ERROR: Grid does not contain position {render_x}, {render_y}.', fg='#FFFFFF', bg="#B60000")
         return
 
     def render_map(
@@ -235,8 +279,7 @@ class Grid:
                 Image.NEAREST
             )
 
-        return canvas
-    
+        return canvas        
 
     # Render Tick
     # def render(self):

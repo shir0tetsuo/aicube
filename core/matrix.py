@@ -58,7 +58,10 @@ class Matrix:
 
             # Update all grids
             for grid in self.grids:
-                grid.update()
+                grid.update(keys, dt)
+                # player_coords = grid.find_player()
+                # if player_coords:
+                #     self.Player.render(grid)
 
             # self.grid.render(self.screen)
             pygame.display.flip()
