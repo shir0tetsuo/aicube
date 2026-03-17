@@ -45,23 +45,40 @@ class Matrix:
             if event.type == pygame.KEYDOWN:
                 print(event)
 
+            if (event.type == pygame.VIDEORESIZE):
+                self.WH = event.size
+
     def Tick(self, t:int=20):
         self.clock.tick(24)
-        dt = self.clock.get_time() / 1000.0
+        dt = self.clock.get_time() #/ 1000.0
         keys = pygame.key.get_pressed()
         events = self.handleCoreInterrupts(keys)
         return dt, keys, events
     
     def LOOP(self):
         while self.running:
+            self.screen.fill((10, 10, 20))
             dt, keys, events = self.Tick(24)
 
             # Update all grids
             for grid in self.grids:
                 grid.update(keys, dt)
-                # player_coords = grid.find_player()
-                # if player_coords:
-                #     self.Player.render(grid)
 
-            # self.grid.render(self.screen)
+                player_coords = grid.find_player()
+
+                if player_coords:
+                    player = next(
+                        i for i in grid.G[player_coords]
+                        if isinstance(i, PlayerAgent)
+                    )
+                    render_x, render_y = player.render_position
+                    sprite = player.render_sprite
+
+                    # Rendering
+                    grid.camera_projections(
+                        (render_x, render_y),
+                        sprite,
+                        self.screen
+                    )
+
             pygame.display.flip()

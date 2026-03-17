@@ -184,6 +184,82 @@ class Grid:
                 players.append(coords)
         return players
     
+    def camera_projections(
+        self,
+        center: Tuple[float, float],
+        sprite: Tile,
+        screen: pg.Surface,
+        scale: int = 2,
+        min_tiles: int = 10
+    ):
+        """
+        Render a camera-centered view onto a pygame screen.
+        """
+
+        screen_w, screen_h = screen.get_size()
+        tile_size = self.tile_size * scale
+
+        # --- Determine how many tiles fit on screen ---
+        tiles_x = max(min_tiles, screen_w // tile_size + 2)
+        tiles_y = max(min_tiles, screen_h // tile_size + 2)
+
+        cx, cy = center
+
+        # --- Determine visible region (float-safe) ---
+        x1 = int(cx - tiles_x // 2)
+        y1 = int(cy - tiles_y // 2)
+        x2 = x1 + tiles_x
+        y2 = y1 + tiles_y
+
+        # --- Clamp to grid bounds ---
+        x1 = max(0, x1)
+        y1 = max(0, y1)
+        x2 = min(self.width, x2)
+        y2 = min(self.height, y2)
+
+        # --- Render tiles ---
+        for y in range(y1, y2):
+            for x in range(x1, x2):
+
+                tile = self.GTiles.get((x, y), self.tiles[-1])
+                frame = tile.get_frame()
+
+                # Convert to pygame surface
+                mode = frame.mode
+                size = frame.size
+                data = frame.tobytes()
+
+                surf = pg.image.fromstring(data, size, mode)
+
+                if scale != 1:
+                    surf = pg.transform.scale(surf, (tile_size, tile_size))
+
+                # Screen position
+                sx = int((x - cx) * tile_size + screen_w // 2)
+                sy = int((y - cy) * tile_size + screen_h // 2)
+
+                screen.blit(surf, (sx, sy))
+
+        # --- Render entities (player for now) ---
+        px, py = center
+
+        if sprite:
+            frame = sprite.get_frame()
+
+            mode = frame.mode
+            size = frame.size
+            data = frame.tobytes()
+
+            surf = pg.image.fromstring(data, size, mode)
+
+            if scale != 1:
+                surf = pg.transform.scale(surf, (tile_size, tile_size))
+
+            sx = int((px - cx) * tile_size + screen_w // 2)
+            sy = int((py - cy) * tile_size + screen_h // 2)
+
+            screen.blit(surf, (sx, sy))
+    
     def update(self, keys:pg.key.ScancodeWrapper, dt:float):
         # Obtain the player from the grid.
         player_coords = self.find_player()
@@ -208,10 +284,13 @@ class Grid:
 
             sprite = player.render_state.get((player.state, player.facing))
             # If animated tile supports frames:
-            if player.state == 'WALK':
-                sprite_frame = sprite.get_frame(player.phase_elapsed)
-            else:
-                sprite_frame = sprite.get_frame()
+            # if player.state == 'WALK':
+            #     sprite_frame = sprite.get_frame(player.phase_elapsed)
+            # else:
+            #     sprite_frame = sprite.get_frame()
+
+            player.render_position = (render_x, render_y)
+            player.render_sprite = sprite
 
             # self.camera_projections(screen) ...
 
@@ -227,6 +306,7 @@ class Grid:
                         player.position = player_coords
                         player.position_start = player_coords
                         player.position_future = player_coords
+                        player.render_position = player_coords
                         cprint(f'ERROR: Grid does not contain position {render_x}, {render_y}.', fg='#FFFFFF', bg="#B60000")
         return
 

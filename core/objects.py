@@ -67,6 +67,10 @@ class PlayerAgent(SpatialObject):
         self.transition_time = 300  # How many ms should go by going position to position
         self.phase_time = 0         # unix timer for ms passed when going tile to tile for smooth animation
         self.phase_elapsed = 0.0    # unix timer +=dt float
+        
+        # Rendering
+        self.render_position = (0, 0)
+        self.render_sprite = self.sprite.down
 
         # The graphic is passed for rendering
         self.render_state = {
