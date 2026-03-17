@@ -7,7 +7,7 @@ from typing import Optional, Literal
 _TILE_CACHE: dict[tuple[int, str], Image.Image] = {}
 
 
-class Tile:
+class Tile:  # TODO : Rename to Sprite
 
     def __init__(
         self,
