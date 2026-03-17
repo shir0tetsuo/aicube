@@ -18,7 +18,7 @@ maps = {
 }
 
 # Load the tileset
-tileset = (os.path.join(images_root, 'PkCrystalTiles.png'))
+tileset = Image.open(os.path.join(images_root, 'PkCrystalTiles.png'))
 
 class Grid:
 
