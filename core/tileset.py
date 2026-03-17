@@ -2,6 +2,11 @@ from PIL import Image
 import time
 from typing import Optional, Literal
 
+
+# Global tile cache
+_TILE_CACHE: dict[tuple[int, str], Image.Image] = {}
+
+
 class Tile:
 
     def __init__(
@@ -67,7 +72,15 @@ class Tile:
                 self.water_frames.append(tile)
                 self.water_durations.append(duration)
 
-    def _get_tile_by_hex(self, hex_id: str) -> Image.Image:
+    def _get_cached_base_tile(self, hex_id: str) -> Image.Image:
+        """
+        Return cached tile from tileset without quad masking.
+        """
+
+        key = (id(self.tileset), hex_id)
+
+        if key in _TILE_CACHE:
+            return _TILE_CACHE[key]
 
         tile_number = int(hex_id, 16)
 
@@ -83,8 +96,21 @@ class Tile:
 
         tile = self.tileset.crop((left, upper, right, lower)).convert("RGBA")
 
+        _TILE_CACHE[key] = tile
+
+        return tile
+
+    def _get_tile_by_hex(self, hex_id: str) -> Image.Image:
+        """
+        Get tile and apply quad masking if required.
+        """
+
+        base = self._get_cached_base_tile(hex_id)
+
         if not any(self.blank_quads):
-            return tile
+            return base
+
+        tile = base.copy()
 
         quad_w = self.tile_size // 2
         quad_h = self.tile_size // 2
