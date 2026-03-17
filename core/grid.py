@@ -156,17 +156,25 @@ class Grid:
         return not self.G.get(coords)
 
     # Obtain a random point from the grid
-    def random_point(self, empty: bool = False) -> Tuple[int, int]:
+    def random_point(self, empty: bool = False, need_passable: bool = True) -> Tuple[int, int]:
+        """
+        Returns a random point in the grid.
+        If `empty=True`, only considers empty cells.
+        If `need_passable=True`, only considers tiles with `collision='passable'`.
+        """
 
-        if not empty:
-            return random.choice(list(self.G.keys()))
+        candidates = list(self.G.keys())
 
-        empty_cells = [k for k, v in self.G.items() if not v]
+        if empty:
+            candidates = [k for k, v in self.G.items() if not v]
 
-        if not empty_cells:
-            raise RuntimeError("No empty cells available")
+        if need_passable:
+            candidates = [k for k in candidates if self.collision_space(k) == 'passable']
 
-        return random.choice(empty_cells)
+        if not candidates:
+            raise RuntimeError("No suitable cells available (empty/passable)")
+
+        return random.choice(candidates)
     
     def find_player(self) -> Optional[Tuple[int, int]]:
         """

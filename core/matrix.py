@@ -60,7 +60,7 @@ class Matrix:
     
     def LOOP(self):
         while self.running:
-            self.screen.fill((10, 10, 20))
+            self.screen.fill((38, 38, 38))
             dt, keys, events = self.Tick(24)
 
             # Update all grids
