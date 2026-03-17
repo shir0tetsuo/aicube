@@ -19,14 +19,6 @@ class Matrix:
 
         pass
 
-    def update(self):
-        
-        # Update all grids
-        for grid in self.grids:
-            grid.update()
-
-        return
-
     def handleInterrupts(self, keys:pygame.key.ScancodeWrapper):
         for event in pygame.event.get():
             if (event.type == pygame.QUIT) or keys[pygame.K_ESCAPE]:
@@ -47,5 +39,10 @@ class Matrix:
     def LOOP(self):
         while self.running:
             dt, keys = self.Tick(24)
+
+            # Update all grids
+            for grid in self.grids:
+                grid.update()
+
             # self.grid.render(self.screen)
             pygame.display.flip()

@@ -1,36 +1,25 @@
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 import httpx
-
-@dataclass
-class SpatialObjDisplay:
-    char: Optional[str] = ' '
-    fg: Optional[str] = '#000000'
-    bg: Optional[str] = '#FFFFFF'
 
 class SpatialObject:
 
     def __init__(
             self,
-            display: SpatialObjDisplay,
+            # display: SpatialObjDisplay,
             spatial_weight: float = 0.5
         ):
-        self.display = display
+        # self.display = display
         self.spatial_weight = spatial_weight
 
 class AIAgent(SpatialObject):
 
     def __init__(
             self,
-            spatial_weight: float = 1.5,
-            char = 'A', fg = "#A6FF00", bg = '#FFFFFF'
+            spatial_weight: float = 2.0,
         ):
         # Initialize the weight and display
         super().__init__(
-            display=SpatialObjDisplay(
-                char=char, fg=fg, bg=bg
-            ),
             spatial_weight=spatial_weight
         )
 
@@ -44,3 +33,10 @@ class AIAgent(SpatialObject):
         self.age = datetime.now()
 
         pass
+
+class PlayerAgent(SpatialObject):
+
+    def __init__(self, spatial_weight = 0.5):
+        super().__init__(spatial_weight)
+
+    
