@@ -23,10 +23,11 @@ class Tile:
             ("5F", 200)
         ],
         name: Optional[str] = None,
-        collision: Literal['passable', 'impassable', 'liquid', 'ledge'] = 'passable'
+        collision: Literal['passable', 'impassable', 'liquid', 'ledge'] = 'passable',
+        scale: int = 1
     ):
         """
-        Tile supporting static or animated frames and optional water replacement.
+        Tile supporting static or animated frames, optional water replacement, and scaling.
 
         pointer format:
             [("1F", 200), ("20", 200)]
@@ -46,6 +47,7 @@ class Tile:
         self.tileset = tileset
         self.tile_size = tile_size
         self.blank_quads = blank_quads or [False, False, False, False]
+        self.scale = scale
 
         self.render_water = water_quads
         self.water_pointer = water_pointer or []
@@ -59,7 +61,6 @@ class Tile:
             self.durations.append(duration)
 
         self.frame_count = len(self.frames)
-
         self.start_time = time.time()
 
         # Prepare water frames if enabled
@@ -76,45 +77,36 @@ class Tile:
         """
         Return cached tile from tileset without quad masking.
         """
-
         key = (id(self.tileset), hex_id)
 
         if key in _TILE_CACHE:
             return _TILE_CACHE[key]
 
         tile_number = int(hex_id, 16)
-
         tiles_per_row = self.tileset.width // self.tile_size
-
         y = tile_number // tiles_per_row
         x = tile_number % tiles_per_row
-
         left = x * self.tile_size
         upper = y * self.tile_size
         right = left + self.tile_size
         lower = upper + self.tile_size
 
         tile = self.tileset.crop((left, upper, right, lower)).convert("RGBA")
-
         _TILE_CACHE[key] = tile
-
         return tile
 
     def _get_tile_by_hex(self, hex_id: str) -> Image.Image:
         """
         Get tile and apply quad masking if required.
         """
-
         base = self._get_cached_base_tile(hex_id)
 
         if not any(self.blank_quads):
             return base
 
         tile = base.copy()
-
         quad_w = self.tile_size // 2
         quad_h = self.tile_size // 2
-
         pixels = tile.load()
 
         quads = [
@@ -135,13 +127,11 @@ class Tile:
         return tile
 
     def _get_animated_frame(self, frames, durations):
-
         if len(frames) == 1:
             return frames[0]
 
         elapsed_ms = (time.time() - self.start_time) * 1000
         total_duration = sum(durations)
-
         elapsed_ms %= total_duration
 
         total = 0
@@ -149,38 +139,37 @@ class Tile:
             total += duration
             if elapsed_ms <= total:
                 return frame
-
         return frames[-1]
 
     def get_frame(self) -> Image.Image:
-
+        """
+        Return the current frame of the tile, scaled if requested.
+        """
         base = self._get_animated_frame(self.frames, self.durations)
 
         if not self.render_water or not any(self.blank_quads):
-            return base
+            result = base
+        else:
+            water = self._get_animated_frame(self.water_frames, self.water_durations)
+            result = water.copy()
+            quad_w = self.tile_size // 2
+            quad_h = self.tile_size // 2
+            quads = [
+                (0, 0, quad_w, quad_h),
+                (quad_w, 0, self.tile_size, quad_h),
+                (0, quad_h, quad_w, self.tile_size),
+                (quad_w, quad_h, self.tile_size, self.tile_size),
+            ]
+            for i, blank in enumerate(self.blank_quads):
+                if blank:
+                    continue
+                x1, y1, x2, y2 = quads[i]
+                region = base.crop((x1, y1, x2, y2))
+                result.paste(region, (x1, y1), region)
 
-        water = self._get_animated_frame(self.water_frames, self.water_durations)
-
-        result = water.copy()
-
-        quad_w = self.tile_size // 2
-        quad_h = self.tile_size // 2
-
-        quads = [
-            (0, 0, quad_w, quad_h),
-            (quad_w, 0, self.tile_size, quad_h),
-            (0, quad_h, quad_w, self.tile_size),
-            (quad_w, quad_h, self.tile_size, self.tile_size),
-        ]
-
-        for i, blank in enumerate(self.blank_quads):
-
-            if blank:
-                continue
-
-            x1, y1, x2, y2 = quads[i]
-
-            region = base.crop((x1, y1, x2, y2))
-            result.paste(region, (x1, y1), region)
+        # Apply scaling
+        if self.scale != 1:
+            new_size = (self.tile_size * self.scale, self.tile_size * self.scale)
+            result = result.resize(new_size, Image.NEAREST)
 
         return result
