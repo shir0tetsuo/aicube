@@ -5,6 +5,12 @@ import httpx
 import pygame as pg
 from .tileset import Tile
 from dataclasses import dataclass
+from .terminal import cprint, Name
+
+# TODO | NOTE : If we aren't done the walk cycle, continue
+#               with the walk animation, no jerking/pause.
+# TODO : Face a direction without doing a movement, maybe using dt
+# TODO : Facing action (E?) and UI
 
 @dataclass
 class Sprite:
@@ -18,6 +24,11 @@ class Sprite:
     down_anim: Tile
 
 class SpatialObject:
+
+    def __repr__(self):
+        objId = hex(id(self))
+        short = '0x..'+objId[-4:]
+        return f'<{short}:{Name(self)}>'
 
     def __init__(
             self,
@@ -100,22 +111,11 @@ class PlayerAgent(SpatialObject):
         self.position_future = {
             'LEFT': (x-1, y),
             'RIGHT': (x+1, y),
-            'UP': (x, y+1),
-            'DOWN': (x, y-1)
+            'UP': (x, y-1),
+            'DOWN': (x, y+1)
         }.get(facing, (x, y))
 
         return
-    
-    # # NOTE : Something doesn't seem right.
-    # def get_animation_frame(self):
-    #     if self.state != 'WALK':
-    #         return 0
-
-    #     # 2-frame walk cycle
-    #     cycle_speed = 100  # ms per frame
-
-    #     frame = int(self.phase_elapsed / cycle_speed) % 2
-    #     return frame
     
     # The position is passed for rendering
     def update(self, dt:float):
@@ -168,7 +168,7 @@ class PlayerAgent(SpatialObject):
         # set move player state
         def do_movement(facing):
             self.facing = facing
-            if not passables.get(facing, False):
+            if passables.get(facing, False):
                 self._player_movement()
             return
 
@@ -184,6 +184,9 @@ class PlayerAgent(SpatialObject):
 
             elif keys[pg.K_d]:
                 do_movement('RIGHT')
+
+        if keys[pg.K_SPACE]:
+            cprint(f'{repr(self)}: {self.position}', fg="#0DE4D9", bg="#202020")
 
         return
     

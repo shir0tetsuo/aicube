@@ -13,7 +13,7 @@ import threading
 images_root = Path(os.path.join(Path(__file__).parent.parent.resolve(), 'images'))
 maps_root = Path(os.path.join(Path(__file__).parent.resolve(), 'maps'))
 maps = {
-    int(m.strip('map').strip('.json')) :
+    int(str(m.stem).strip('map')) :
     os.path.join(str(maps_root), m)
     for m in maps_root.iterdir()
 }
@@ -196,6 +196,8 @@ class Grid:
         Render a camera-centered view onto a pygame screen.
         """
 
+        # TODO : Fill empty space with an impassable tile
+
         screen_w, screen_h = screen.get_size()
         tile_size = self.tile_size * scale
 
@@ -265,7 +267,13 @@ class Grid:
         player_coords = self.find_player()
 
         if player_coords:
-            player:PlayerAgent = next([i for i in self.G[player_coords] if isinstance(i, PlayerAgent)])
+            player: PlayerAgent = next(
+                (i for i in self.G[player_coords] if isinstance(i, PlayerAgent)),
+                None  # optional default if not found
+            )
+            if player is None:
+                return # no player found, currently fine if this is the only update
+            
             x,y=player_coords
             w = player.spatial_weight
         
@@ -273,8 +281,8 @@ class Grid:
             passable = {
                 'LEFT':  self.has_space((x-1, y), w), # left
                 'RIGHT': self.has_space((x+1, y), w), # right
-                'UP':    self.has_space((x, y+1), w), # up
-                'DOWN':  self.has_space((x, y-1), w)  # down
+                'UP':    self.has_space((x, y-1), w), # up
+                'DOWN':  self.has_space((x, y+1), w)  # down
             }
             player.move(keys, passable)
 
@@ -298,7 +306,7 @@ class Grid:
             # not equal to the player's position
             if isinstance(render_x, int) and isinstance(render_y, int):
                 if (render_x != x) or (render_y != y):
-                    if self.G.get((render_x, render_y)):
+                    if isinstance(self.G.get((render_x, render_y), None), list):
                         self.G[player_coords].remove(player)
                         self.G[(render_x, render_y)].append(player)
                     else:

@@ -1,5 +1,6 @@
 import re
 from IPython.display import clear_output as cls
+from typing import Callable
 # cls()
 
 def color_text(text: str, fg_hex: str = None, bg_hex: str = None, reset: bool = True) -> str:
@@ -45,3 +46,6 @@ def color_text(text: str, fg_hex: str = None, bg_hex: str = None, reset: bool = 
 
 def cprint(text:str, fg=None, bg=None):
     print(color_text(text, fg, bg))
+
+def Name(CLASS:Callable):
+    return CLASS.__class__.__name__

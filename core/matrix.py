@@ -36,7 +36,8 @@ class Matrix:
         pass
 
     def handleCoreInterrupts(self, keys:pygame.key.ScancodeWrapper):
-        for event in pygame.event.get():
+        events = pygame.event.get()
+        for event in events:
             if (event.type == pygame.QUIT) or keys[pygame.K_ESCAPE]:
                 self.running = False
                 pygame.quit()
@@ -47,6 +48,8 @@ class Matrix:
 
             if (event.type == pygame.VIDEORESIZE):
                 self.WH = event.size
+
+        return events
 
     def Tick(self, t:int=20):
         self.clock.tick(24)

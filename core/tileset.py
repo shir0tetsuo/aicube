@@ -2,6 +2,7 @@ from PIL import Image
 import time
 from typing import Optional, Literal
 
+# TODO : Fix missing water
 
 # Global tile cache
 _TILE_CACHE: dict[tuple[int, str], Image.Image] = {}
