@@ -28,7 +28,13 @@ class Grid:
         # (SCREEN FILL)
         -1: Tile(tileset, pointer=[('5C', 0)], blank_quads=[True, True, True, True], collision='impassable'),
         # WATER
-        0: Tile(tileset, pointer=[('5C', 0)], blank_quads=[True, True, True, True], water_quads=True, collision='liquid'),
+        # 0: Tile(tileset, pointer=[('5C', 0)], blank_quads=[False, True, True, False], water_quads=True, collision='liquid'),
+        0: Tile(tileset, pointer=[
+                ("5C", 1000),
+                ("5D", 1000),
+                ("5E", 1000),
+                ("5F", 1000)
+            ], collision='liquid'),
         
         # OPEN SPACE
         1: Tile(tileset, pointer=[('28', 0)]),

@@ -161,38 +161,56 @@ class Tile:
                 return frame
 
         return frames[-1]
-
-    def get_frame(self, elapsed_override=None) -> Image.Image:
+    
+    # BUG : Transparent quads don't display water.
+    def get_frame(self, elapsed_override=None, debug=False) -> Image.Image:
         """
         Return the current frame of the tile, optionally flipped and scaled.
+        Blank quads use water animation if water_quads=True.
         """
+        # --- Determine the base tile frame ---
         base = self._get_animated_frame(self.frames, self.durations, elapsed_override)
 
-        if not self.render_water or not any(self.blank_quads):
-            result = base
-        else:
+        # --- Determine the water frame if needed ---
+        if self.render_water and self.water_frames:
             water = self._get_animated_frame(self.water_frames, self.water_durations, elapsed_override)
-            result = water.copy()
-            quad_w = self.tile_size // 2
-            quad_h = self.tile_size // 2
-            quads = [
-                (0, 0, quad_w, quad_h),
-                (quad_w, 0, self.tile_size, quad_h),
-                (0, quad_h, quad_w, self.tile_size),
-                (quad_w, quad_h, self.tile_size, self.tile_size),
-            ]
-            for i, blank in enumerate(self.blank_quads):
-                if blank:
-                    continue
-                x1, y1, x2, y2 = quads[i]
+        else:
+            water = None
+
+        # --- Prepare result image ---
+        result = Image.new("RGBA", (self.tile_size, self.tile_size), (0, 0, 0, 0))
+
+        # --- Split into 4 quads ---
+        quad_w = self.tile_size // 2
+        quad_h = self.tile_size // 2
+        quads = [
+            (0, 0, quad_w, quad_h),          # Q1
+            (quad_w, 0, self.tile_size, quad_h),  # Q2
+            (0, quad_h, quad_w, self.tile_size),  # Q3
+            (quad_w, quad_h, self.tile_size, self.tile_size), # Q4
+        ]
+
+        for i, (x1, y1, x2, y2) in enumerate(quads):
+            if self.blank_quads[i]:
+                if water:
+                    region = water.crop((x1, y1, x2, y2))
+                    result.paste(region, (x1, y1), region)
+                    if debug:
+                        print(f"Quad {i+1}: using water frame")
+                else:
+                    if debug:
+                        print(f"Quad {i+1}: blank, no water frame available")
+            else:
                 region = base.crop((x1, y1, x2, y2))
                 result.paste(region, (x1, y1), region)
+                if debug:
+                    print(f"Quad {i+1}: using base tile")
 
-        # Flip horizontally if requested
+        # --- Flip horizontally if requested ---
         if self.flip_horizontal:
             result = result.transpose(Image.FLIP_LEFT_RIGHT)
 
-        # Apply scaling
+        # --- Apply scaling ---
         if self.scale != 1:
             new_size = (self.tile_size * self.scale, self.tile_size * self.scale)
             result = result.resize(new_size, Image.NEAREST)
