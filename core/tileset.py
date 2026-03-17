@@ -7,7 +7,7 @@ from typing import Optional, Literal
 _TILE_CACHE: dict[tuple[int, str], Image.Image] = {}
 
 
-class Tile:  # TODO : Rename to Sprite
+class Tile:
 
     def __init__(
         self,
@@ -24,13 +24,15 @@ class Tile:  # TODO : Rename to Sprite
         ],
         name: Optional[str] = None,
         collision: Literal['passable', 'impassable', 'liquid', 'ledge'] = 'passable',
-        scale: int = 1
+        scale: int = 1,
+        flip_horizontal: bool = False
     ):
         """
-        Tile supporting static or animated frames, optional water replacement, and scaling.
+        Tile supporting static or animated frames, optional water replacement,
+        scaling, and horizontal flipping.
 
         pointer format:
-            [("1F", 200), ("20", 200)]
+            `[("1F", 200), ("20", 200)]`
 
         blank_quad order:
             `[Q1, Q2, Q3, Q4]`
@@ -41,13 +43,13 @@ class Tile:  # TODO : Rename to Sprite
         Q3 | Q4
         ```
         """
-
         self.name = name
         self.collision = collision
         self.tileset = tileset
         self.tile_size = tile_size
         self.blank_quads = blank_quads or [False, False, False, False]
         self.scale = scale
+        self.flip_horizontal = flip_horizontal
 
         self.render_water = water_quads
         self.water_pointer = water_pointer or []
@@ -143,7 +145,7 @@ class Tile:  # TODO : Rename to Sprite
 
     def get_frame(self) -> Image.Image:
         """
-        Return the current frame of the tile, scaled if requested.
+        Return the current frame of the tile, optionally flipped and scaled.
         """
         base = self._get_animated_frame(self.frames, self.durations)
 
@@ -166,6 +168,10 @@ class Tile:  # TODO : Rename to Sprite
                 x1, y1, x2, y2 = quads[i]
                 region = base.crop((x1, y1, x2, y2))
                 result.paste(region, (x1, y1), region)
+
+        # Flip horizontally if requested
+        if self.flip_horizontal:
+            result = result.transpose(Image.FLIP_LEFT_RIGHT)
 
         # Apply scaling
         if self.scale != 1:

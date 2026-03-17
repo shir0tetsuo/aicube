@@ -1,8 +1,21 @@
+import time
 from datetime import datetime
 from typing import Optional, Dict
 import httpx
 import pygame as pg
 from .tileset import Tile
+from dataclasses import dataclass
+
+@dataclass
+class Sprite:
+    up: Tile
+    left: Tile
+    right: Tile
+    down: Tile
+    up_anim: Tile
+    left_anim: Tile
+    right_anim: Tile
+    down_anim: Tile
 
 class SpatialObject:
 
@@ -40,7 +53,7 @@ class PlayerAgent(SpatialObject):
 
     def __init__(
             self,
-            tileset: Dict[str, Tile],
+            tileset: Sprite,
             spatial_weight = 2.0,
         ):
         super().__init__(spatial_weight)
@@ -49,9 +62,18 @@ class PlayerAgent(SpatialObject):
         self.state = 'IDLE'
         self.facing = 'DOWN'
         self.position = (0, 0)
+        self.position_future = (0, 0)
+        self.transition_time = 300  # How many ms should go by going position to position
+        self.phase_time = 0  # unix timer for ms passed when going tile to tile for smooth animation
 
     def _player_movement(self, direction):
-
+        self.phase_time = time.time()
+        self.state = 'WALK'
+        return
+    
+    def update(self):
+        # TODO : Transition from position to position, 
+        #        animated; if now - phase_time >= self.transition_time
         return
 
     def move(self, keys:pg.key.ScancodeWrapper):
@@ -69,10 +91,16 @@ class PlayerAgent(SpatialObject):
             if keys[pg.K_d]:
                 self.facing = 'RIGHT'
                 self._player_movement()
-                
+
         return
     
     def render(self):
         state = self.state
         facing = self.facing
+
+
+
+        # TODO : Calculate the diff between the delta t and the phase t
+        #        to project the sprite at the correct location on the
+        #        screen while it's in 'WALK' state
         return

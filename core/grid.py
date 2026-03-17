@@ -1,4 +1,4 @@
-from .objects import AIAgent, SpatialObject
+from .objects import AIAgent, SpatialObject, PlayerAgent
 from typing import List, Tuple, Dict, Union, Optional
 from .terminal import cls, cprint
 from .tileset import Tile
@@ -45,7 +45,7 @@ class Grid:
 
     def __init__(
         self,
-        agents: Optional[List[AIAgent | SpatialObject]],
+        agents: Optional[List[AIAgent | SpatialObject | PlayerAgent]],
         map_number = 0,
         max_objects_in_space: float = 3.0,
         tile_size = 32  # pixels as width and height per tile
@@ -159,6 +159,28 @@ class Grid:
             raise RuntimeError("No empty cells available")
 
         return random.choice(empty_cells)
+    
+    def find_player(self) -> Optional[Tuple[int, int]]:
+        """
+        Returns the coordinates of the first PlayerAgent in the grid,
+        or None if no PlayerAgent is present.
+        """
+        for coords, cell in self.G.items():
+            for obj in cell:
+                if isinstance(obj, PlayerAgent):
+                    return coords
+        return None
+
+    # Might be useful later ...
+    def find_all_players(self) -> List[Tuple[int, int]]:
+        """
+        Returns a list of coordinates of all PlayerAgents in the grid.
+        """
+        players = []
+        for coords, cell in self.G.items():
+            if any(isinstance(obj, PlayerAgent) for obj in cell):
+                players.append(coords)
+        return players
     
     def update(self):
 
