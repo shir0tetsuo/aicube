@@ -286,7 +286,14 @@ class Grid:
             'DOWN':  self.has_space((x, y+1), w)
         }
     
-    def update(self, keys:pg.key.ScancodeWrapper, dt:float, screen:pg.Surface):
+    def update_player(self, keys:pg.key.ScancodeWrapper, dt:float, screen:pg.Surface):
+        '''
+        Within the grid context, update the player.
+        The first seen player's coordinates are used
+        to delegate player movement control.
+
+        Projections render based on player position over the given surface.
+        '''
         # OBTAIN PLAYER FROM GRID -----------------------------
         player_coords = self.find_player()
         if player_coords:

@@ -22,10 +22,10 @@ class Matrix:
                 left=Tile(tileset, pointer=[('B7', 0)]),
                 right=Tile(tileset, pointer=[('B7', 0)], flip_horizontal=True),
                 down=Tile(tileset, pointer=[('A7', 0)]),
-                up_anim=Tile(tileset, pointer=[('AF', 100), ('C7', 100)]),
-                left_anim=Tile(tileset, pointer=[('B7', 100), ('CF', 100)]),
-                right_anim=Tile(tileset, pointer=[('B7', 100), ('CF', 100)], flip_horizontal=True),
-                down_anim=Tile(tileset, pointer=[('A7', 100), ('BF', 100)])
+                up_anim=Tile(tileset, pointer=[('AF', 200), ('C7', 200)]),
+                left_anim=Tile(tileset, pointer=[('B7', 200), ('CF', 200)]),
+                right_anim=Tile(tileset, pointer=[('B7', 200), ('CF', 200)], flip_horizontal=True),
+                down_anim=Tile(tileset, pointer=[('A7', 200), ('BF', 200)])
             ),
             spatial_weight=2.0
         )
@@ -66,6 +66,6 @@ class Matrix:
 
             # Update all grids
             for grid in self.grids:
-                grid.update(keys, dt, self.screen)
+                grid.update_player(keys, dt, self.screen)
 
             pygame.display.flip()
