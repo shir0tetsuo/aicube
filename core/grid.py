@@ -275,60 +275,54 @@ class Grid:
             sy = int((py - cy) * tile_size + screen_h // 2)
 
             screen.blit(surf, (sx, sy))
+
+    def neighbors(self, coords:Tuple[int, int], spatial_weight_free:float):
+        x,y = coords
+        w = spatial_weight_free
+        return {
+            'LEFT':  self.has_space((x-1, y), w),
+            'RIGHT': self.has_space((x+1, y), w),
+            'UP':    self.has_space((x, y-1), w),
+            'DOWN':  self.has_space((x, y+1), w)
+        }
     
     def update(self, keys:pg.key.ScancodeWrapper, dt:float, screen:pg.Surface):
-        # Obtain the player from the grid.
+        # OBTAIN PLAYER FROM GRID -----------------------------
         player_coords = self.find_player()
-
         if player_coords:
             player: PlayerAgent = next(
                 (i for i in self.G[player_coords] if isinstance(i, PlayerAgent)),
                 None  # optional default if not found
             )
+            # Return if no player found, 
+            # projections will not render
             if player is None:
-                return # no player found, currently fine if this is the only update
-            
-            x,y=player_coords
-            w = player.spatial_weight
-        
+                return
+                
+            # MOVEMENT ----------------------------------------
             # Perform player movement based on spatial weights
-            passable = {
-                'LEFT':  self.has_space((x-1, y), w), # left
-                'RIGHT': self.has_space((x+1, y), w), # right
-                'UP':    self.has_space((x, y-1), w), # up
-                'DOWN':  self.has_space((x, y+1), w)  # down
-            }
-            player.move(dt, keys, passable)
+            player.move(
+                dt, 
+                keys, 
+                self.neighbors(player_coords, player.spatial_weight)
+            )
 
-            # NOTE : This data can be used to render the sprite.,
-            #        and the "camera".
+            # WALk--IDLE -> Screen Position -> Render Position, Render Sprite
             render_x, render_y = player.update(dt)
-
-            sprite = player.render_state.get((player.state, player.facing))
-            # If animated tile supports frames:
-            # if player.state == 'WALK':
-            #     sprite_frame = sprite.get_frame(player.phase_elapsed)
-            # else:
-            #     sprite_frame = sprite.get_frame()
-
             player.render_position = (render_x, render_y)
-            player.render_sprite = sprite
-
-            # self.camera_projections(screen) ...
+            player.render_sprite = player.render_state.get((player.state, player.facing))
 
             # Move the player on the grid if position is
             # not equal to the player's position
             if isinstance(render_x, int) and isinstance(render_y, int):
+                x,y=player_coords
                 if (render_x != x) or (render_y != y):
                     if isinstance(self.G.get((render_x, render_y), None), list):
                         self.G[player_coords].remove(player)
                         self.G[(render_x, render_y)].append(player)
                     else:
                         # Safety
-                        player.position = player_coords
-                        player.position_start = player_coords
-                        player.position_future = player_coords
-                        player.render_position = player_coords
+                        player._safe_coords(player_coords)
                         cprint(f'ERROR: Grid does not contain position {render_x}, {render_y}.', fg='#FFFFFF', bg="#B60000")
         
             return self.camera_projections(player.render_position, player.render_sprite, screen)
@@ -383,43 +377,4 @@ class Grid:
                 Image.NEAREST
             )
 
-        return canvas        
-
-    # Render Tick
-    # def render(self):
-        
-        # cls(True)  # clear terminal
-
-        # # print top border
-        # print(self.bb['top'])
-
-        # for y in range(self.height):
-
-        #     print(self.bb['mid'], end='')
-
-        #     for x in range(self.width):
-
-        #         cell = self.G[(x, y)]
-
-        #         if not cell:
-        #             # empty space
-        #             print(' ', end='')
-        #             continue
-
-        #         # number of objects in this cell
-        #         count = len(cell)
-
-        #         # find the heaviest object (highest spatial_weight)
-        #         heaviest = max(cell, key=lambda o: o.spatial_weight)
-
-        #         # get the foreground color from display
-        #         fg = getattr(heaviest.display, 'fg', '#000000')
-
-        #         # print count in color
-        #         cprint(str(count), color=fg, end='')
-
-        #     print(self.bb['mid'])
-
-        # # print bottom border
-        # print(self.bb['btm'])
-
+        return canvas

@@ -1,6 +1,6 @@
 import time
 from datetime import datetime
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Tuple
 import httpx
 import pygame as pg
 from .tileset import Tile
@@ -62,6 +62,13 @@ class AIAgent(SpatialObject):
 
 class PlayerAgent(SpatialObject):
 
+    def _safe_coords(self, coords:Tuple[int, int]):
+        self.position           = coords
+        self.position_start     = coords
+        self.position_future    = coords
+        self.render_position    = coords
+        return
+
     def __init__(
             self,
             sprite: Sprite,
@@ -69,34 +76,39 @@ class PlayerAgent(SpatialObject):
         ):
         super().__init__(spatial_weight)
 
+        # SPATIAL CONTROLLER -------------------------------------
+
+        # Direction Control
         self.sprite = sprite
-        self.state = 'IDLE'
+        self.state  = 'IDLE'
         self.facing = 'DOWN'
-        self.position = (0, 0)
-        self.position_start = (0, 0)
-        self.position_future = (0, 0)
-        self.transition_time = 300  # How many ms should go by going position to position
-        self.phase_time = 0         # unix timer for ms passed when going tile to tile for smooth animation
-        self.phase_elapsed = 0.0    # unix timer +=dt float
-        self.input_threshold = 50
-        # self.next_direction = None
-        # self.passables = { d: False for d in ['UP','DOWN','LEFT','RIGHT'] }
-        
-        # Rendering
-        self.render_position = (0, 0)
         self.render_sprite = self.sprite.down
 
-        # The graphic is passed for rendering
+        # Position Initialization
+        self._safe_coords((0, 0))
+
+        # The graphic passed for rendering
         self.render_state = {
-            ('IDLE', 'UP'): self.sprite.up,
-            ('IDLE', 'DOWN'): self.sprite.down,
-            ('IDLE', 'LEFT'): self.sprite.left,
-            ('IDLE', 'RIGHT'): self.sprite.right,
-            ('WALK', 'UP'): self.sprite.up_anim,
-            ('WALK', 'DOWN'): self.sprite.down_anim,
-            ('WALK', 'LEFT'): self.sprite.left_anim,
-            ('WALK', 'RIGHT'): self.sprite.right_anim,
+            ('IDLE', 'UP'):     self.sprite.up,
+            ('IDLE', 'DOWN'):   self.sprite.down,
+            ('IDLE', 'LEFT'):   self.sprite.left,
+            ('IDLE', 'RIGHT'):  self.sprite.right,
+            ('WALK', 'UP'):     self.sprite.up_anim,
+            ('WALK', 'DOWN'):   self.sprite.down_anim,
+            ('WALK', 'LEFT'):   self.sprite.left_anim,
+            ('WALK', 'RIGHT'):  self.sprite.right_anim,
         }
+
+        # TIME CONTROLLER   --------------------------------------
+
+        # Transition Control
+        self.input_threshold = 50   # How many ms to hold key, delaying changing positions
+        self.transition_time = 400  # How many ms should go by going position to position
+        self.phase_time      = 0    # unix timer for ms passed when going tile to tile for smooth animation
+        self.phase_elapsed   = 0.0  # unix timer +=dt float
+
+        # End of Init
+
 
     def _player_movement(
             self, 
@@ -178,19 +190,13 @@ class PlayerAgent(SpatialObject):
             passables: Dict[str, bool] = { d: False for d in ['UP','DOWN','LEFT','RIGHT'] }
         ):
 
-        # self.passables = passables
-
         direction = None
+        if   keys[pg.K_w]: direction = 'UP'
+        elif keys[pg.K_s]: direction = 'DOWN'
+        elif keys[pg.K_a]: direction = 'LEFT'
+        elif keys[pg.K_d]: direction = 'RIGHT'
 
-        if keys[pg.K_w]:
-            direction = 'UP'
-        elif keys[pg.K_s]:
-            direction = 'DOWN'
-        elif keys[pg.K_a]:
-            direction = 'LEFT'
-        elif keys[pg.K_d]:
-            direction = 'RIGHT'
-
+        # debugging
         if keys[pg.K_SPACE]:
             cprint(f'{repr(self)}: {self.position}', fg="#0DE4D9", bg="#202020", end="")
             cprint(f' {self.state} {self.facing} (WEIGHT: {self.spatial_weight})', fg="#FA8F2C", bg="#202020")
