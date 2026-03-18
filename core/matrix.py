@@ -3,6 +3,7 @@ import sys
 import math
 from .grid import tileset, Grid
 from .tileset import Tile
+from .terminal import cprint
 from .objects import PlayerAgent, Sprite
 
 class Matrix:
@@ -44,7 +45,7 @@ class Matrix:
                 sys.exit()
 
             if event.type == pygame.KEYDOWN:
-                print(event)
+                cprint(repr(event), "#3A3A3A", "#757575")
 
             if (event.type == pygame.VIDEORESIZE):
                 self.WH = event.size

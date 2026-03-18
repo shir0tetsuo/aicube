@@ -44,8 +44,8 @@ def color_text(text: str, fg_hex: str = None, bg_hex: str = None, reset: bool = 
 
     return f"{start}{text}{end}"
 
-def cprint(text:str, fg=None, bg=None):
-    print(color_text(text, fg, bg))
+def cprint(text:str, fg=None, bg=None, end=None):
+    print(color_text(text, fg, bg), end=end)
 
 def Name(CLASS:Callable):
     return CLASS.__class__.__name__

@@ -192,8 +192,9 @@ class PlayerAgent(SpatialObject):
             direction = 'RIGHT'
 
         if keys[pg.K_SPACE]:
-            cprint(f'{repr(self)}: {self.position}', fg="#0DE4D9", bg="#202020")
-            
+            cprint(f'{repr(self)}: {self.position}', fg="#0DE4D9", bg="#202020", end="")
+            cprint(f' {self.state} {self.facing} (WEIGHT: {self.spatial_weight})', fg="#FA8F2C", bg="#202020")
+
         # No key pressed → reset buffer
         if direction is None:
             self.input_hold_time = 0.0
