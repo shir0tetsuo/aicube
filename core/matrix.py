@@ -65,23 +65,6 @@ class Matrix:
 
             # Update all grids
             for grid in self.grids:
-                grid.update(keys, dt)
-
-                player_coords = grid.find_player()
-
-                if player_coords:
-                    player = next(
-                        i for i in grid.G[player_coords]
-                        if isinstance(i, PlayerAgent)
-                    )
-                    render_x, render_y = player.render_position
-                    sprite = player.render_sprite
-
-                    # Rendering
-                    grid.camera_projections(
-                        (render_x, render_y),
-                        sprite,
-                        self.screen
-                    )
+                grid.update(keys, dt, self.screen)
 
             pygame.display.flip()

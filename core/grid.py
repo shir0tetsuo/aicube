@@ -276,7 +276,7 @@ class Grid:
 
             screen.blit(surf, (sx, sy))
     
-    def update(self, keys:pg.key.ScancodeWrapper, dt:float):
+    def update(self, keys:pg.key.ScancodeWrapper, dt:float, screen:pg.Surface):
         # Obtain the player from the grid.
         player_coords = self.find_player()
 
@@ -330,6 +330,8 @@ class Grid:
                         player.position_future = player_coords
                         player.render_position = player_coords
                         cprint(f'ERROR: Grid does not contain position {render_x}, {render_y}.', fg='#FFFFFF', bg="#B60000")
+        
+            return self.camera_projections(player.render_position, player.render_sprite, screen)
         return
 
     def render_map(
