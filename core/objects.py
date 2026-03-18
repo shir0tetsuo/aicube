@@ -191,6 +191,9 @@ class PlayerAgent(SpatialObject):
         elif keys[pg.K_d]:
             direction = 'RIGHT'
 
+        if keys[pg.K_SPACE]:
+            cprint(f'{repr(self)}: {self.position}', fg="#0DE4D9", bg="#202020")
+            
         # No key pressed → reset buffer
         if direction is None:
             self.input_hold_time = 0.0
@@ -218,8 +221,5 @@ class PlayerAgent(SpatialObject):
             if self.input_hold_time >= self.input_threshold:
                 if passables.get(direction, False):
                     self._player_movement()
-
-        if keys[pg.K_SPACE]:
-            cprint(f'{repr(self)}: {self.position}', fg="#0DE4D9", bg="#202020")
 
         self.next_direction = direction
