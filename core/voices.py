@@ -4,7 +4,9 @@ from qwen_tts import Qwen3TTSModel as qwen3
 from typing import Literal, Optional, Union
 import numpy as np
 from .terminal import cprint
+import soundfile as sf
 import gc
+import threading
 import atexit
 
 from torch.cuda import OutOfMemoryError, AcceleratorError
@@ -23,7 +25,7 @@ pg.mixer.init(frequency=24000, size=-16, channels=1)
 # Sohee     | Korean    | Warm Korean female voice with rich emotion.
 class TTS:
 
-    _shared_model = None
+    _SharedModels = None
 
     def __init__(
             self,
@@ -35,13 +37,15 @@ class TTS:
         ):
 
         # Efficiently load the model once into memory
-        if TTS._shared_model is None:
-            TTS._shared_model = qwen3.from_pretrained(
+        if TTS._SharedModels is None:
+            TTS._SharedModels = qwen3.from_pretrained(
                 "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
                 device_map="cuda:0",
                 dtype=tor.bfloat16
         )
-        self.model = TTS._shared_model
+        self.model = TTS._SharedModels
+
+        self.save_lock = threading.RLock()
         
         self.vl = voice_language
         self.vs = voice_speaker
@@ -72,15 +76,19 @@ class TTS:
 
     # Cleanup --------------------------------------
 
-    def cleanup(self, destroy_model: bool = False):
-        if destroy_model:
-            self.destroy_model()
-
+    @staticmethod
+    def _gc():
         gc.collect()
 
         if tor.cuda.is_available():
             tor.cuda.empty_cache()
             tor.cuda.ipc_collect()
+
+    def cleanup(self, destroy_model: bool = False):
+        if destroy_model:
+            self.destroy_model()
+        self._gc()
+
 
     def destroy_model(self):
         try:
@@ -126,7 +134,7 @@ class TTS:
             if retry:
                 cprint("[TTS] Reloading model and retrying...", "yellow")
 
-                TTS._shared_model = None
+                TTS._SharedModels = None
                 self.model = qwen3.from_pretrained(
                     "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
                     device_map="cuda:0",
@@ -149,7 +157,8 @@ class TTS:
             text:Union[list[str]|str],
             language:Optional[list[str]|str] = None,
             speaker:Optional[list[str]|str] = None,
-            instruct:Optional[list[str]|str] = None
+            instruct:Optional[list[str]|str] = None,
+            filename:Optional[list[str]] = None
         ):
 
         language = language or self.vl
@@ -165,7 +174,7 @@ class TTS:
             )
 
         wavs = [w.copy() for w in wavs]
-        for audio in wavs:
+        for idx, audio in list(enumerate(wavs)):
 
             # 🔑 Convert float → int16 for pygame
             audio_int16 = (audio * 32767).astype(np.int16)
@@ -181,6 +190,13 @@ class TTS:
             # Create sound and play
             sound = pg.sndarray.make_sound(audio_int16)
             sound.play()
+
+            if filename:
+                try:
+                    with self.save_lock:
+                        sf.write(filename[idx], audio, sr)
+                except Exception as e:
+                    print(e)
 
             # Wait for playback to finish
             # pg.time.wait(int(len(audio_int16) / sr * 1000))
