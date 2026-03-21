@@ -44,7 +44,22 @@ class Grid:
 
         # GRASS
         5: Tile(tileset, pointer=[('0', 0)]),
-        6: Tile(tileset, pointer=[('30', 0)])
+        6: Tile(tileset, pointer=[('30', 0)]),
+
+        # FLOOR
+        7: Tile(tileset, pointer=[('598', 0)]),
+        # COMPUTER DESK
+        8: Tile(tileset, pointer=[('5A1', 0)], collision='impassable'),
+        9: Tile(tileset, pointer=[('5A2', 0)], collision='impassable'),
+        10: Tile(tileset, pointer=[('5A9', 0)]),
+        11: Tile(tileset, pointer=[('5AA', 0)]),
+        # COMPUTER (BIG)
+        12: Tile(tileset, pointer=[('5B3', 0)], collision='impassable'),
+        13: Tile(tileset, pointer=[('5BB', 0)], collision='impassable'),
+        # BLUE WALL
+        14: Tile(tileset, pointer=[('540', 0)], collision='impassable'),
+        # OUT TILE
+        15: Tile(tileset, pointer=[('5B8', 0)])
 
     }
 

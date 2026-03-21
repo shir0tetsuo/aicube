@@ -31,7 +31,7 @@ class Matrix:
         )
 
         self.grids = [
-            Grid(agents=[self.Player])
+            Grid(agents=[self.Player],map_number=1)
         ]
 
         pass

@@ -23,7 +23,8 @@ class Tile:
             ("5E", 200),
             ("5F", 200)
         ],
-        name: Optional[str] = None,
+        name: Optional[str] = None,         # For AI Agents
+        description: Optional[str] = None,  # For AI Agents
         collision: Literal['passable', 'impassable', 'liquid', 'ledge'] = 'passable',
         scale: int = 1,
         flip_horizontal: bool = False
@@ -45,6 +46,7 @@ class Tile:
         ```
         """
         self.name = name
+        self.description = description
         self.collision = collision
         self.tileset = tileset
         self.tile_size = tile_size
