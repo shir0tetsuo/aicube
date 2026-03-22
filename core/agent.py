@@ -92,7 +92,7 @@ class AutoAgent(TextModelRunner):
             tokenizer = "TinyLlama/TinyLlama-1.1B-Chat-v1.0", 
             device = None,
 
-            seed: int = field(default_factory=lambda: random.randint(1, 100)),
+            seed: Optional[Any] = None,
 
             # PRETEXTS
             societal_role: Optional[str] = None,
@@ -104,7 +104,7 @@ class AutoAgent(TextModelRunner):
         super().__init__(model, tokenizer, device)
 
         # Randomness
-        self.seed = seed
+        self.seed = seed if seed is not None else random.randint(1, 100)
         self.rng  = random.Random(self.seed)
         self.variance = 0.75
         
@@ -125,10 +125,10 @@ class AutoAgent(TextModelRunner):
                 {
                     'role': 'system', 'content': (
                         'You are a virtual agent in a virtual environment.\n\n'
-                        f'{self.mind.as_awareness_strings()}\n\n'
+                        # f'{self.mind.as_awareness_strings()}\n\n'
                         f'{personality}\n\n'
                         f'Your ROLE in this virtual environment:\n'
-                        f'{self.role}\nYou will then be known as: {self.role}\n'
+                        f'{self.role}\nYou will thus be known as: {self.role}\n'
                         f'{societal_role_description}\n\n'
                     )
                 }
@@ -181,6 +181,7 @@ class AutoAgent(TextModelRunner):
         # (and also re-evaluate this value)
         self.reflection_tick = 50
 
+    @staticmethod
     def tokenalloc(
             banks: List[MemoryBank],
             total_tokens: int = 2048,
