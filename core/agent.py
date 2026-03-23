@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from .llm import TextModelRunner
 import random
 import json
+from .terminal import cprint
+import math
 
 llmMsgs = List[Dict[str, str]]
 
@@ -170,7 +172,7 @@ class AutoAgent(TextModelRunner):
         self.memory_ailments      =AutoAgent.MemoryBank()                     # "Disability", Ailment
         self.memory_beliefs       =AutoAgent.MemoryBank( weight=jitter(2.0) ) # "Belief" System (Few words, re-evaluated)
         self.memory_dialogue      =AutoAgent.MemoryBank( weight=jitter(1.5) ) # Dialogues between Agents/User, temporary
-        self.memory_spatial       =AutoAgent.MemoryBank()                     # Direct spatial information from Grid (Does it align with job task?)
+        # self.memory_spatial       =AutoAgent.MemoryBank()                     # Direct spatial information from Grid (Does it align with job task?)
         self.memory_relationships =AutoAgent.MemoryBank( weight=jitter(2.5) ) # Relationships to Other Agents
         self.memory_jobs          =AutoAgent.MemoryBank( weight=jitter(2.0) ) # Tasking and Mission
 
@@ -185,16 +187,16 @@ class AutoAgent(TextModelRunner):
     def tokenalloc(
             banks: List[MemoryBank],
             total_tokens: int = 2048,
-            reserve_tokens: int = 256,
+            reserve_tokens: int = 256,  # Maybe get the token count of incoming instructs
             min_tokens: int = 32
         ) -> None:
         """
-        Mutates MemoryBank.max_tokens based on weight distribution.
+        Mutates `MemoryBank.max_tokens` based on weight distribution.
         """
 
         available_tokens = max(0, total_tokens - reserve_tokens)
 
-        active_banks = [b for b in banks if not b.empty]
+        active_banks = [b for b in banks if (b.messages or b.instruct)]
 
         if not active_banks:
             return
@@ -221,4 +223,190 @@ class AutoAgent(TextModelRunner):
             scale = available_tokens / total_allocated
             for b in active_banks:
                 b.max_tokens = int(b.max_tokens * scale)
-   
+
+    def _trim_optimization(self, bank:MemoryBank, longterm_bank:MemoryBank, bank_description:str='memories'):
+        '''Squeeze current memory banks into a sum
+        with JSON instructions for what should be
+        passed into long-term memory or historic-term;
+        Interpret any feelings, etc.'''
+
+        tokens = self.token_count(bank.messages)
+        if tokens < bank.max_tokens:
+            return
+
+        bank_importance = math.ceil(bank.weight)+1
+
+        bank.instruct = [
+            {
+                "role": "system",
+                "content": (
+                    f'You are {self.role}. You are now {self.age} cycles old. '
+                    f"Between 0 and {bank_importance}, the importance of these memories "
+                    f"is {bank.weight}.\n\n"
+                    f"These are your {bank_description}. There are now too many of them.\n\n"
+                    "Your objective: SUMMARIZE in as few words as possible and EXTRACT "
+                    f"lessons, beliefs if any, and important events if any from your {bank_description}.\n\n"
+                    "For 'feelings', quickly summarize such as:\n"
+                    f"{self.role} was feeling ... about ...\n\n"
+                    # f"Your token limit: {bank.max_tokens}, try to keep it under this.\n\n"
+                    # "Respond ONLY in JSON:\n\n"
+                    # "{'summary': '...', 'keep_long_term': '...', 'feelings': '...'}"
+                    "Respond ONLY in valid JSON with this exact schema:\n\n"
+                    "{\n"
+                    '"summary": "short compressed memory",\n'
+                    '"keep_long_term": "critical facts only",\n'
+                    '"feelings": "emotional state summary"\n'
+                    "}"
+                )
+            }
+        ]
+
+        reorganized_thoughts = self.think(
+            self.instructions(bank.instruct + bank.messages), 
+            normalize_decoded=True, 
+            # max_new_tokens=bank.max_tokens, 
+            json_mode=True
+        )
+        if not isinstance(reorganized_thoughts, dict) or "error" in reorganized_thoughts:
+            cprint('ERROR: AutoAgent did not respond with JSON.', fg='#ffffff', bg='#ff0000')
+            while self.token_count(bank.messages) > bank.max_tokens:
+                bank.messages.pop(0)
+        else:
+            summary = reorganized_thoughts.get('summary')
+            longterm = reorganized_thoughts.get('keep_long_term')
+            feelings = reorganized_thoughts.get('feelings')
+            bank.messages = [{"role": self.role, "content": summary}]
+            longterm_bank.messages.append({"role": self.role, "content": longterm})
+            self.memory_feelings.messages.append({"role": self.role, "content": feelings})
+
+        return
+    
+    def _bank_token_count(self, bank: MemoryBank) -> int:
+        return self.token_count(bank.instruct + bank.messages)
+
+    # TODO
+    # [✔] Memory system
+    # [✔] Token attention system
+    # [✔] Identity anchoring
+    # [✔] LLM inference wrapper
+    # [✔] Context builder
+    # [ ] Memory write-back
+    # [ ] Reflection loop  ← NEXT
+    # [ ] Multi-agent interaction
+    def update(self, spatial:MemoryBank, instruct: Optional[llmMsgs] = None, dialogue:llmMsgs=[]):
+
+        # Spatial Awareness => Incoming
+
+        # SPATIAL : - Others around.
+        #           - Neighboring tiles.
+        #           - Initiated actions/activities, extra data.
+        #           - Held Items
+
+        TOKENCOUNT = self._bank_token_count
+
+        finite = {
+            'spatial': spatial,
+            'identity': self.personality,
+            'ailments': self.memory_ailments
+        }
+
+        finite_tokens = sum([TOKENCOUNT(bank) for bank in finite.values()])
+
+        weighed = {
+            'feels': self.memory_feelings,
+            'short': self.memory_short,
+            'long': self.memory_long,
+            'hist': self.memory_historic,
+            'beliefs': self.memory_beliefs,
+            'dialogue': self.memory_dialogue,
+            'relationships': self.memory_relationships,
+            'jobs': self.memory_jobs
+        }
+
+        if dialogue:
+            weighed['dialogue'].messages.extend(dialogue)
+
+
+        instruct = instruct or [
+            {
+                "role": "system", 
+                "content": (
+                    f"You are {self.role}. Continue the conversation."
+                ) if dialogue else (
+                    f"You are {self.role}. You must decide what to do next. "
+                    
+                    # Continue Job
+                    "Figure out what your task is. If you are currently performing a job, "
+                    'let your "action" = "CONTINUE"\n\n'
+
+                    # Continue Conversation
+                    "If you wish to continue a conversation, "
+                    'let your "action" = "CONVERSE"\n\n'
+
+                    # Movement
+                    "If you wish to navigate in the world, "
+                    'let your "action" = "MOVE (DIRECTION)"'
+                    "and replace (DIRECTION) with UP, DOWN, LEFT, or RIGHT.\n\n"
+
+                    # Idle (increase time until next tick)
+                    "If you wish to randomly explore or let time pass by, "
+                    'let your "action" = "IDLE"\n\n'
+
+                    "Respond ONLY in valid JSON with this exact schema:\n\n"
+                    "{\n"
+                    '"action": "next action",\n'
+                    # '"short_term_memory": "",\n'
+                    '"thoughts": "personal thoughts",\n' # to be split into short term
+                    '"feelings": "emotional state summary",\n'
+                    '"say": "said aloud"'
+                    "}\n\n"
+                    
+                )
+            }
+        ]
+
+        instruct_tokens = self.token_count(instruct)
+
+        self.tokenalloc(
+            [bank for bank in weighed.values()],
+            reserve_tokens=finite_tokens + instruct_tokens + 128,
+            min_tokens=32
+        )
+
+        # Optimization Layer
+        self._trim_optimization(weighed['feels'], weighed['long'], 'feelings')
+        self._trim_optimization(weighed['short'], weighed['long'], 'short term memories')
+        self._trim_optimization(weighed['long'], weighed['hist'], 'long term memories')
+        self._trim_optimization(weighed['beliefs'], weighed['beliefs'], 'beliefs')
+        self._trim_optimization(weighed['dialogue'], weighed['long'], 'memories of recent conversation')
+        self._trim_optimization(weighed['relationships'], weighed['long'], 'relationship memories')
+        self._trim_optimization(weighed['jobs'], weighed['jobs'], 'memories of jobs')
+        
+
+        brain = self.MemoryBank(
+            instruct=instruct,
+            messages=[
+                *finite['identity'].instruct,
+                *weighed['hist'].messages,
+                *weighed['beliefs'].messages,
+                *weighed['jobs'].messages,
+                *finite['spatial'].instruct,
+                *finite['spatial'].messages,
+                *finite['ailments'].messages,
+                *weighed['feels'].messages,
+                *weighed['short'].messages,
+                *weighed['long'].messages,
+                *weighed['relationships'].messages,
+                *weighed['dialogue'].messages
+            ]
+        )
+ 
+        tokens = self.instructions(brain.instruct + brain.messages)
+        result = self.think(
+            tokens, 
+            normalize_decoded = True if dialogue else False,
+            json_mode = False if dialogue else True,
+            wrap_role = self.role if dialogue else None
+        )
+        
+        return result
