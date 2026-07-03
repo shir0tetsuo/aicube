@@ -70,7 +70,7 @@ class AutoAgent(TextModelRunner):
 
         @property
         def empty(self):
-            return True if (len(self.messages)==0) else False
+            return len(self.messages) == 0
         
         @property
         def last(self) -> Dict[str, str]:
@@ -78,12 +78,11 @@ class AutoAgent(TextModelRunner):
 
     @property
     def role(self):
-        objId = self.__objId
-        short = objId[-4:]
+        short = self.__objId[-4:]
         return f'<{self.societal_role}:{short}>'
     
     @staticmethod
-    def jitter(rng:random.Random, value: float, variance: float):
+    def jitter(rng: random.Random, value: float, variance: float):
         return value * rng.uniform(1 - variance, 1 + variance)
 
     def __init__(
@@ -107,7 +106,7 @@ class AutoAgent(TextModelRunner):
 
         # Randomness
         self.seed = seed if seed is not None else random.randint(1, 100)
-        self.rng  = random.Random(self.seed)
+        self.rng = random.Random(self.seed)
         self.variance = 0.75
         
         self.__objId = hex(id(self))  # Hex ID of this object
@@ -121,20 +120,18 @@ class AutoAgent(TextModelRunner):
         # based on how they feel about things
         self.mbti = self.rng.choice(self.MBTI)
 
-        jitter = lambda value: (self.jitter(self.rng, value, self.variance))
+        jitter = lambda v: self.jitter(self.rng, v, self.variance)
+
         self.personality = AutoAgent.MemoryBank(
-            instruct=[
-                {
-                    'role': 'system', 'content': (
-                        'You are a virtual agent in a virtual environment.\n\n'
-                        # f'{self.mind.as_awareness_strings()}\n\n'
-                        f'{personality}\n\n'
-                        f'Your ROLE in this virtual environment:\n'
-                        f'{self.role}\nYou will thus be known as: {self.role}\n'
-                        f'{societal_role_description}\n\n'
-                    )
-                }
-            ],
+            instruct=[{
+                'role': 'system',
+                'content': (
+                    'You are a virtual agent in a virtual environment.\n\n'
+                    f'{personality}\n\n'
+                    f'Your ROLE:\n{self.role}\nKnown as: {self.role}\n'
+                    f'{societal_role_description}\n\n'
+                )
+            }],
             weight=jitter(2.0)
         )
         # -- NOTE
@@ -183,124 +180,200 @@ class AutoAgent(TextModelRunner):
         # (and also re-evaluate this value)
         self.reflection_tick = 50
 
+    # ---------------- TOKEN UTILS ----------------
+
+    def _ensure_token_cache(self, msg):
+        if "_tokens" not in msg:
+            msg["_tokens"] = self.token_count([msg])
+        return msg["_tokens"]
+
+    def _ensure_token_cache_many(self, messages):
+        for m in messages:
+            self._ensure_token_cache(m)
+
+    def _bank_token_count(self, bank):
+        self._ensure_token_cache_many(bank.messages)
+        return sum(m["_tokens"] for m in bank.messages) + self.token_count(bank.instruct)
+
+    # ---------------- TOKEN ALLOCATION ----------------
+
     @staticmethod
-    def tokenalloc(
-            banks: List[MemoryBank],
-            total_tokens: int = 2048,
-            reserve_tokens: int = 256,  # Maybe get the token count of incoming instructs
-            min_tokens: int = 32
-        ) -> None:
-        """
-        Mutates `MemoryBank.max_tokens` based on weight distribution.
-        """
+    def tokenalloc(banks, total_tokens=2048, reserve_tokens=256, min_tokens=32):
+        available = max(0, total_tokens - reserve_tokens)
+        active = [b for b in banks if (b.messages or b.instruct)]
 
-        available_tokens = max(0, total_tokens - reserve_tokens)
-
-        active_banks = [b for b in banks if (b.messages or b.instruct)]
-
-        if not active_banks:
+        if not active:
             return
 
-        total_weight = sum(b.weight for b in active_banks)
+        total_weight = sum(b.weight for b in active)
 
-        # Fallback: equal distribution
         if total_weight == 0:
-            equal = available_tokens // len(active_banks)
-            for b in active_banks:
+            equal = available // len(active)
+            for b in active:
                 b.max_tokens = equal
             return
 
-        # First pass: proportional allocation
-        for b in active_banks:
-            proportion = b.weight / total_weight
-            tokens = int(proportion * available_tokens)
+        for b in active:
+            tokens = int((b.weight / total_weight) * available)
             b.max_tokens = max(min_tokens, tokens)
 
-        # Optional: normalize if we overshot due to min_tokens
-        total_allocated = sum(b.max_tokens for b in active_banks)
-
-        if total_allocated > available_tokens:
-            scale = available_tokens / total_allocated
-            for b in active_banks:
+        total_alloc = sum(b.max_tokens for b in active)
+        if total_alloc > available:
+            scale = available / total_alloc
+            for b in active:
                 b.max_tokens = int(b.max_tokens * scale)
 
-    def _trim_optimization(self, bank:MemoryBank, longterm_bank:MemoryBank, bank_description:str='memories'):
-        '''Squeeze current memory banks into a sum
-        with JSON instructions for what should be
-        passed into long-term memory or historic-term;
-        Interpret any feelings, etc.'''
+    # ---------------- MICRO SUMMARIZER ----------------
 
-        tokens = self.token_count(bank.messages)
+    def _summarize_to_one_sentence(self, content: str) -> str:
+        prompt = [
+            {"role": "system", "content": (
+                "Summarize into EXACTLY one short sentence (max 20 words). "
+                "Preserve key facts. No explanation."
+            )},
+            {"role": "user", "content": content}
+        ]
+
+        result = self.think(prompt, normalize_decoded=True)
+
+        if isinstance(result, list):
+            result = result[0].get("content", "")
+
+        if not isinstance(result, str):
+            return ""
+
+        return result.strip()
+
+    # ---------------- PROMOTION ----------------
+
+    def _promote_before_trim(self, source, target, promote_ratio=0.25):
+        if not source.messages:
+            return
+
+        self._ensure_token_cache_many(source.messages)
+
+        scored = []
+        for i, msg in enumerate(source.messages):
+            recency = (i + 1) / len(source.messages)
+            length = msg["_tokens"]
+            score = recency * 0.7 + math.log1p(length) * 0.3
+            scored.append((score, msg))
+
+        scored.sort(reverse=True, key=lambda x: x[0])
+        k = max(1, int(len(scored) * promote_ratio))
+        promoted = [msg for _, msg in scored[:k]]
+
+        existing = set(m["content"] for m in target.messages)
+
+        for msg in promoted:
+            summary = self._summarize_to_one_sentence(msg["content"])
+            if not summary or summary in existing:
+                continue
+
+            new_msg = {"role": self.role, "content": summary}
+            self._ensure_token_cache(new_msg)
+            target.messages.append(new_msg)
+            existing.add(summary)
+
+        source.messages = [m for m in source.messages if m not in promoted]
+
+    # ---------------- TRIM ----------------
+
+    def hybrid_trim_tokens(self, bank, keep_recent=10):
+        messages = bank.messages
+        if not messages:
+            return messages
+
+        self._ensure_token_cache_many(messages)
+
+        total = sum(m["_tokens"] for m in messages)
+        if total <= bank.max_tokens:
+            return messages
+
+        indexed = list(enumerate(messages))
+        recent = indexed[-keep_recent:]
+        remaining = indexed[:-keep_recent]
+
+        selected = []
+        current = 0
+
+        # Keep recent (from newest backwards)
+        for idx, msg in reversed(recent):
+            t = msg["_tokens"]
+            if current + t <= bank.max_tokens:
+                selected.append((idx, msg))
+                current += t
+
+        selected.reverse()
+
+        self.rng.shuffle(remaining)
+
+        for idx, msg in remaining:
+            t = msg["_tokens"]
+            if current + t <= bank.max_tokens:
+                selected.append((idx, msg))
+                current += t
+            if current >= bank.max_tokens:
+                break
+
+        selected.sort(key=lambda x: x[0])
+        return [m for _, m in selected]
+
+    # ---------------- TRIM OPT ----------------
+
+    def _trim_optimization(self, bank, longterm_bank, desc="memories"):
+        self._ensure_token_cache_many(bank.messages)
+        tokens = sum(m["_tokens"] for m in bank.messages)
+
         if tokens < bank.max_tokens:
             return
 
-        bank_importance = math.ceil(bank.weight)+1
+        bank.instruct = [{
+            "role": "system",
+            "content": (
+                f"You are {self.role}. These {desc} are too large.\n"
+                "Summarize and extract key facts.\n"
+                "Respond JSON:\n"
+                '{"summary":"","keep_long_term":"","feelings":""}'
+            )
+        }]
 
-        bank.instruct = [
-            {
-                "role": "system",
-                "content": (
-                    f'You are {self.role}. You are now {self.age} cycles old. '
-                    f"Between 0 and {bank_importance}, the importance of these memories "
-                    f"is {bank.weight}.\n\n"
-                    f"These are your {bank_description}. There are now too many of them.\n\n"
-                    "Your objective: SUMMARIZE in as few words as possible and EXTRACT "
-                    f"lessons, beliefs if any, and important events if any from your {bank_description}.\n\n"
-                    "For 'feelings', quickly summarize such as:\n"
-                    f"{self.role} was feeling ... about ...\n\n"
-                    # f"Your token limit: {bank.max_tokens}, try to keep it under this.\n\n"
-                    # "Respond ONLY in JSON:\n\n"
-                    # "{'summary': '...', 'keep_long_term': '...', 'feelings': '...'}"
-                    "Respond ONLY in valid JSON with this exact schema:\n\n"
-                    "{\n"
-                    '"summary": "short compressed memory",\n'
-                    '"keep_long_term": "critical facts only",\n'
-                    '"feelings": "emotional state summary"\n'
-                    "}"
-                )
-            }
-        ]
-
-        reorganized_thoughts = self.think(
-            self.instructions(bank.instruct + bank.messages), 
-            normalize_decoded=True, 
-            # max_new_tokens=bank.max_tokens, 
+        result = self.think(
+            self.instructions(bank.instruct + bank.messages),
+            normalize_decoded=True,
             json_mode=True
         )
-        if not isinstance(reorganized_thoughts, dict) or "error" in reorganized_thoughts:
-            cprint('ERROR: AutoAgent did not respond with JSON.', fg='#ffffff', bg='#ff0000')
-            while self.token_count(bank.messages) > bank.max_tokens:
-                bank.messages.pop(0)
-        else:
-            summary = reorganized_thoughts.get('summary')
-            longterm = reorganized_thoughts.get('keep_long_term')
-            feelings = reorganized_thoughts.get('feelings')
-            bank.messages = [{"role": self.role, "content": summary}]
-            longterm_bank.messages.append({"role": self.role, "content": longterm})
-            self.memory_feelings.messages.append({"role": self.role, "content": feelings})
 
-        return
-    
-    def _bank_token_count(self, bank: MemoryBank) -> int:
-        return self.token_count(bank.instruct + bank.messages)
+        if not isinstance(result, dict):
+            self._promote_before_trim(bank, longterm_bank)
+            bank.messages = self.hybrid_trim_tokens(bank)
+            return
 
-    # TODO
-    # [✔] Memory system
-    # [✔] Token attention system
-    # [✔] Identity anchoring
-    # [✔] LLM inference wrapper
-    # [✔] Context builder
-    # [ ] Memory write-back
-    # [ ] Reflection loop  ← NEXT
-    # [ ] Multi-agent interaction
-    def update(self, spatial:MemoryBank, instruct: Optional[llmMsgs] = None, dialogue:llmMsgs=[]):
+        summary = result.get("summary")
+        longterm = result.get("keep_long_term")
+        feelings = result.get("feelings")
 
-        # Spatial Awareness => Incoming
+        if summary:
+            new_msg = {"role": self.role, "content": summary}
+            self._ensure_token_cache(new_msg)
+            bank.messages = [new_msg]
 
-        # SPATIAL : - Others around.
-        #           - Neighboring tiles.
-        #           - Initiated actions/activities, extra data.
-        #           - Held Items
+        if longterm:
+            msg = {"role": self.role, "content": longterm}
+            self._ensure_token_cache(msg)
+            longterm_bank.messages.append(msg)
+
+        if feelings:
+            msg = {"role": self.role, "content": feelings}
+            self._ensure_token_cache(msg)
+            self.memory_feelings.messages.append(msg)
+
+    # ---------------- UPDATE ----------------
+
+    def update(self, spatial, instruct=None, dialogue=None):
+
+        if dialogue is None:
+            dialogue = []
 
         TOKENCOUNT = self._bank_token_count
 
@@ -310,7 +383,7 @@ class AutoAgent(TextModelRunner):
             'ailments': self.memory_ailments
         }
 
-        finite_tokens = sum([TOKENCOUNT(bank) for bank in finite.values()])
+        finite_tokens = sum(TOKENCOUNT(b) for b in finite.values())
 
         weighed = {
             'feels': self.memory_feelings,
@@ -325,7 +398,6 @@ class AutoAgent(TextModelRunner):
 
         if dialogue:
             weighed['dialogue'].messages.extend(dialogue)
-
 
         instruct = instruct or [
             {
@@ -368,20 +440,12 @@ class AutoAgent(TextModelRunner):
         instruct_tokens = self.token_count(instruct)
 
         self.tokenalloc(
-            [bank for bank in weighed.values()],
-            reserve_tokens=finite_tokens + instruct_tokens + 128,
-            min_tokens=32
+            list(weighed.values()),
+            reserve_tokens=finite_tokens + instruct_tokens + 128
         )
 
-        # Optimization Layer
-        self._trim_optimization(weighed['feels'], weighed['long'], 'feelings')
-        self._trim_optimization(weighed['short'], weighed['long'], 'short term memories')
-        self._trim_optimization(weighed['long'], weighed['hist'], 'long term memories')
-        self._trim_optimization(weighed['beliefs'], weighed['beliefs'], 'beliefs')
-        self._trim_optimization(weighed['dialogue'], weighed['long'], 'memories of recent conversation')
-        self._trim_optimization(weighed['relationships'], weighed['long'], 'relationship memories')
-        self._trim_optimization(weighed['jobs'], weighed['jobs'], 'memories of jobs')
-        
+        for k, b in weighed.items():
+            self._trim_optimization(b, self.memory_long, k)
 
         brain = self.MemoryBank(
             instruct=instruct,
@@ -400,13 +464,12 @@ class AutoAgent(TextModelRunner):
                 *weighed['dialogue'].messages
             ]
         )
- 
+
         tokens = self.instructions(brain.instruct + brain.messages)
-        result = self.think(
-            tokens, 
-            normalize_decoded = True if dialogue else False,
-            json_mode = False if dialogue else True,
-            wrap_role = self.role if dialogue else None
+
+        return self.think(
+            tokens,
+            normalize_decoded=bool(dialogue),
+            json_mode=not dialogue,
+            wrap_role=self.role if dialogue else None
         )
-        
-        return result
